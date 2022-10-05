@@ -9,6 +9,8 @@ import (
 	"log"
 	"os"
 	"strings"
+
+	"github.com/joho/godotenv"
 )
 
 type ContextData struct {
@@ -21,74 +23,32 @@ type ContextData struct {
 	Statement string `json:"statement"`
 }
 
-const main_path = "/mnt/data/ASPEN_WORKS/LCNDB/MAIN/"
 
 func main() {
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	main_path := os.Getenv("BASE_PATH")
+
+
 	plant := flag.String("p", "", "the plant")
 
 	net := flag.String("n", "A", "LCN [a/b]")
 	flag.Parse()
 
-	prefix, err := make_prefix(*plant)
-	if err != nil {
-		panic(err)
 
-	}
 
 	sstat_path := main_path + strings.ToUpper(*net) + "/"
 
-	dir, err := os.Open(sstat_path)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	files, err := dir.Readdir(-1)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	out_slice := []ContextData{}
-	out_json := []byte{}
-	for _, f := range files {
-		if strings.Contains(f.Name(), "SSTAT") {
-			readFile, err := os.Open(sstat_path + f.Name())
-
-			if err != nil {
-				fmt.Println(err)
-			}
-			fileScanner := bufio.NewScanner(readFile)
-
-			fileScanner.Split(bufio.ScanLines)
 
 
-			for fileScanner.Scan() {
-				if strings.HasPrefix(fileScanner.Text(), prefix) {
-					var c = new(ContextData)
-					c.Point = strings.TrimSpace(fileScanner.Text()[1:9])
-					c.Sequence = strings.TrimSpace(fileScanner.Text()[39:49])
-					c.State = strings.TrimSpace(fileScanner.Text()[49:55])
-					c.CompTime = strings.TrimSpace(fileScanner.Text()[21:39])
-					c.Phase = strings.TrimSpace(fileScanner.Text()[89:98])
-					c.Step = strings.TrimSpace(fileScanner.Text()[99:109])
-					c.Statement = strings.TrimSpace(fileScanner.Text()[109:])
-					out_slice = append(out_slice, *c)
-				}
-			}
-			readFile.Close()
+	out_json, _ := create_json(plant, sstat_path)
+	fmt.Printf("%s\n", out_json)
 
-			out_json, _ = json.MarshalIndent(out_slice,"", " ")
-
-
-			fmt.Println(string(out_json))
-
-			err = os.WriteFile(*plant+"_seqs.json", out_json, 0644)
-			if err != nil {
-				fmt.Println(err)
-			}
-
-		}
-	}
 }
+
 
 func make_prefix(plant string) (string, error) {
 	if plant == "" {
@@ -105,3 +65,81 @@ func make_prefix(plant string) (string, error) {
 
 	return string(' ') + plant[:2], nil
 }
+
+
+func create_json(plant *string, sstat_path string) ([]byte, error) {
+	dir, err := os.Open(sstat_path)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	files, err := dir.Readdir(-1)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var out_json = []byte{}
+
+
+	for _, f := range files {
+		if strings.Contains(f.Name(), "SSTAT") {
+			readFile, err := os.Open(sstat_path + f.Name())
+
+			if err != nil {
+				fmt.Println(err)
+			}
+			fileScanner := bufio.NewScanner(readFile)
+
+			fileScanner.Split(bufio.ScanLines)
+
+			prefix, err := make_prefix(*plant)
+			if err != nil {		panic(err)
+
+			}
+			out_slice := []ContextData{}
+
+			for fileScanner.Scan() {
+				if strings.HasPrefix(fileScanner.Text(), prefix) {
+					var c = new(ContextData)
+					c.Point = strings.TrimSpace(fileScanner.Text()[1:9])
+					c.Sequence = strings.TrimSpace(fileScanner.Text()[39:49])
+					c.State = strings.TrimSpace(fileScanner.Text()[49:55])
+					c.CompTime = strings.TrimSpace(fileScanner.Text()[21:39])
+					c.Phase = strings.TrimSpace(fileScanner.Text()[89:98])
+					c.Step = strings.TrimSpace(fileScanner.Text()[99:109])
+					c.Statement = strings.TrimSpace(fileScanner.Text()[109:])
+					out_slice = append(out_slice, *c)
+				}
+			}
+			readFile.Close()
+
+			out_json, err = json.MarshalIndent(out_slice,"", " ")
+			if err!= nil {
+                fmt.Println(err)
+				return nil, err
+			}
+
+			if string(out_json) == "[]" {
+				log.Printf("no data available for plant " + *plant)
+				return nil, err
+			}
+
+			err = os.WriteFile(*plant+"_seqs.json", out_json, 0644)
+			if err != nil {
+				fmt.Println(err)
+				return nil, err
+			}
+
+		}
+	}
+	return out_json, nil
+}
+
+
+
+
+
+
+
+
+
