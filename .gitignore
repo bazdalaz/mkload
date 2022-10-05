@@ -19,6 +19,8 @@ go.work
 
 # Temp data
 *.json
+*.EC
+
 
 # Env variables
 .env
